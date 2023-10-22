@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <iostream>
 #include <numeric>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -30,14 +31,29 @@ int main(int argc, char** argv) {
                  std::back_inserter(pairs),
                  [](const K& key, const V& value) { return std::make_pair(key, value); });
 
-  list.insert_range(pairs);
+  auto half_of_the_pairs = pairs;
+  half_of_the_pairs.resize(num_keys >> 1);
 
-  for (const auto& key : keys) {
-    auto result = list.find(key);
+  list.insert_range(half_of_the_pairs);
+
+  std::vector<std::optional<V>> search_result(num_keys);
+
+  list.find_range(keys, search_result);
+  for (size_t i = 0; i < keys.size(); i++) {
+    auto result = search_result[i];
+    auto key = keys[i];
     if (result.has_value()) {
       std::cout << "Key: " << key << ", Value: " << result.value() << std::endl;
     } else {
       std::cout << "Key: " << key << " not found." << std::endl;
     }
   }
+
+  // for (const auto& key : keys) {
+  //   if (result.has_value()) {
+  //     std::cout << "Key: " << key << ", Value: " << result.value() << std::endl;
+  //   } else {
+  //     std::cout << "Key: " << key << " not found." << std::endl;
+  //   }
+  // }
 }

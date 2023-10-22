@@ -100,6 +100,32 @@ struct concurrent_linked_list {
       thread.join();
     }
   }
+
+  template <typename R1, typename R2>
+  void find_range(R1&& input, R2& output) {
+    const auto range_length = input.end() - input.begin();
+    const std::size_t chunk_per_thread = 32;
+    const std::size_t num_chunks =
+        (range_length + chunk_per_thread - 1) / chunk_per_thread;
+
+    std::vector<std::thread> threads;
+
+    for (std::size_t chunk = 0; chunk < num_chunks; chunk++) {
+      std::thread thread([chunk, chunk_per_thread, range_length, &input, &output, this] {
+        for (size_t i = 0; i < chunk_per_thread; i++) {
+          auto offset = chunk * chunk_per_thread + i;
+          if (offset < range_length) {
+            output[offset] = find(input[offset]);
+          }
+        }
+      });
+      threads.push_back(std::move(thread));
+    }
+
+    for (auto& thread : threads) {
+      thread.join();
+    }
+  }
   std::optional<mapped_type> find(const key_type& key) const {
     linked_list_node* current_node = root_;
     while (current_node != nullptr) {
