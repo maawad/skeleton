@@ -48,12 +48,4 @@ int main(int argc, char** argv) {
       std::cout << "Key: " << key << " not found." << std::endl;
     }
   }
-
-  // for (const auto& key : keys) {
-  //   if (result.has_value()) {
-  //     std::cout << "Key: " << key << ", Value: " << result.value() << std::endl;
-  //   } else {
-  //     std::cout << "Key: " << key << " not found." << std::endl;
-  //   }
-  // }
 }

@@ -1,4 +1,6 @@
 
+#pragma once
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -7,6 +9,8 @@
 #include <optional>
 #include <thread>
 #include <vector>
+
+#include "detail/launcher.hpp"
 
 namespace skeleton {
 
@@ -78,53 +82,51 @@ struct concurrent_linked_list {
   void insert_range(R&& rg) {
     const auto range_length = rg.end() - rg.begin();
     const std::size_t chunk_per_thread = 32;
-    const std::size_t num_chunks =
-        (range_length + chunk_per_thread - 1) / chunk_per_thread;
 
-    std::vector<std::thread> threads;
-
-    for (std::size_t chunk = 0; chunk < num_chunks; chunk++) {
-      std::thread thread([chunk, chunk_per_thread, range_length, &rg, this] {
-        for (size_t i = 0; i < chunk_per_thread; i++) {
-          auto offset = chunk * chunk_per_thread + i;
-          if (offset < range_length) {
-            insert(rg[offset]);
-          }
+    auto function = [&](std::size_t chunk_index,
+                        std::size_t chunk_size,
+                        const R&& range,
+                        std::size_t num_items) {
+      for (std::size_t i = 0; i < chunk_size; i++) {
+        auto offset = chunk_index * chunk_size + i;
+        if (offset < num_items) {
+          auto absolute_index = chunk_index * chunk_size + offset;
+          insert(range[absolute_index]);
         }
-      });
+      }
+    };
 
-      threads.push_back(std::move(thread));
-    }
-
-    for (auto& thread : threads) {
-      thread.join();
-    }
+    auto result = detail::cpu::launcher(chunk_per_thread,  // launch parameters
+                                        range_length,
+                                        function,      // function
+                                        std::ref(rg),  // args
+                                        range_length);
   }
 
   template <typename R1, typename R2>
   void find_range(R1&& input, R2& output) {
     const auto range_length = input.end() - input.begin();
     const std::size_t chunk_per_thread = 32;
-    const std::size_t num_chunks =
-        (range_length + chunk_per_thread - 1) / chunk_per_thread;
 
-    std::vector<std::thread> threads;
-
-    for (std::size_t chunk = 0; chunk < num_chunks; chunk++) {
-      std::thread thread([chunk, chunk_per_thread, range_length, &input, &output, this] {
-        for (size_t i = 0; i < chunk_per_thread; i++) {
-          auto offset = chunk * chunk_per_thread + i;
-          if (offset < range_length) {
-            output[offset] = find(input[offset]);
-          }
+    auto function = [&](std::size_t chunk_index,
+                        std::size_t chunk_size,
+                        const R1&& input,
+                        R2& output,
+                        std::size_t num_items) {
+      for (size_t i = 0; i < chunk_size; i++) {
+        auto offset = chunk_index * chunk_per_thread + i;
+        if (offset < range_length) {
+          output[offset] = find(input[offset]);
         }
-      });
-      threads.push_back(std::move(thread));
-    }
+      }
+    };
 
-    for (auto& thread : threads) {
-      thread.join();
-    }
+    auto result = detail::cpu::launcher(chunk_per_thread,  // launch parameters
+                                        range_length,
+                                        function,         // function
+                                        std::ref(input),  // args
+                                        std::ref(output),
+                                        range_length);
   }
   std::optional<mapped_type> find(const key_type& key) const {
     linked_list_node* current_node = root_;
