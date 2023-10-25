@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <iostream>
+#include <iterator>
 #include <numeric>
 #include <optional>
 #include <string>
@@ -16,7 +17,7 @@ int main(int argc, char** argv) {
   static constexpr auto NodeSize = 128;
   skeleton::concurrent_linked_list<K, V, NodeSize> list;
 
-  const std::size_t num_keys = 12;
+  const std::size_t num_keys = (argc < 2) ? 9 : std::atoi(argv[1]);
   std::vector<K> keys(num_keys);
   std::vector<V> values(num_keys);
   std::iota(keys.begin(), keys.end(), 0);
@@ -34,7 +35,7 @@ int main(int argc, char** argv) {
   auto half_of_the_pairs = pairs;
   half_of_the_pairs.resize(num_keys >> 1);
 
-  list.insert_range(half_of_the_pairs);
+  list.insert_range(pairs);
 
   std::vector<std::optional<V>> search_result(num_keys);
 
@@ -48,4 +49,16 @@ int main(int argc, char** argv) {
       std::cout << "Key: " << key << " not found." << std::endl;
     }
   }
+
+  std::transform(list.begin(),
+                 list.end(),
+                 std::ostream_iterator<std::string>(std::cout, "\n"),
+                 [](const auto& element) {
+                   return "{" + std::to_string(element.first) + ", " +
+                          std::to_string(element.second) + "}";
+                 });
+
+  // for (auto it = list.begin(); it != list.end(); it++) {
+  //   std::cout << it->first << " -- " << it->second << std::endl;
+  // }
 }

@@ -10,9 +10,14 @@
 #include <thread>
 #include <vector>
 
+#include <iostream>
+
 #include "detail/launcher.hpp"
 
 namespace skeleton {
+
+template <class Key, class T, std::size_t CacheLineSize, class Allocator>
+class concurrent_linked_list_iterator;
 
 template <class Key,
           class T,
@@ -27,6 +32,12 @@ struct concurrent_linked_list {
   using difference_type = std::ptrdiff_t;
 
   using allocator_type = Allocator;
+
+  using iterator = concurrent_linked_list_iterator<Key, T, CacheLineSize, Allocator>;
+
+  iterator begin() { return iterator(root_, 0); }
+
+  iterator end() { return iterator(nullptr, 0); }
 
   static constexpr std::size_t cache_line_size = CacheLineSize;
   static constexpr std::size_t metadata_size =
@@ -45,6 +56,14 @@ struct concurrent_linked_list {
     void clear() {
       size = 0;
       next = nullptr;
+    }
+    std::pair<bool, std::size_t> find(key_type key) const {
+      for (std::size_t i = 0; i < pairs_per_node; i++) {
+        if (key == data[i].first) {
+          return {true, i};
+        }
+      }
+      return {false, pairs_per_node};
     }
   };
 
@@ -67,6 +86,11 @@ struct concurrent_linked_list {
     bool need_space = false;
     while (current_node != nullptr) {
       std::lock_guard<std::mutex> lock(current_node->node_mutex);
+      auto find_result = current_node->find(pair.first);
+      if (find_result.first == true) {
+        current_node->data[find_result.second].second = pair.second;
+        break;
+      }
       auto size = current_node->size;
       auto next_node = current_node->next;
       if (size < pairs_per_node) {
@@ -94,8 +118,7 @@ struct concurrent_linked_list {
       for (std::size_t i = 0; i < chunk_size; i++) {
         auto offset = chunk_index * chunk_size + i;
         if (offset < num_items) {
-          auto absolute_index = chunk_index * chunk_size + offset;
-          insert(range[absolute_index]);
+          insert(range[offset]);
         }
       }
     };
@@ -189,4 +212,63 @@ struct concurrent_linked_list {
   linked_list_node* root_;
   std::size_t num_workers_;
 };
+
+template <class Key, class T, std::size_t CacheLineSize, class Allocator>
+class concurrent_linked_list_iterator {
+ public:
+  using iterator_category = std::forward_iterator_tag;
+  using value_type = typename concurrent_linked_list<Key, T, CacheLineSize, Allocator>::
+      mutable_value_type;
+  using reference = value_type&;
+  using pointer = value_type*;
+  using difference_type = std::ptrdiff_t;
+
+  concurrent_linked_list_iterator(
+      concurrent_linked_list<Key, T, CacheLineSize, Allocator>::linked_list_node* node,
+      std::size_t index)
+      : current_node_(node), index_(index) {}
+
+  concurrent_linked_list_iterator& operator++() {
+    if (current_node_ == nullptr) {
+      throw std::out_of_range("Iterator has reached the end.");
+    }
+
+    index_++;
+
+    if (index_ >= current_node_->size) {
+      current_node_ = current_node_->next;
+      index_ = 0;
+    }
+
+    return *this;
+  }
+
+  concurrent_linked_list_iterator operator++(int) {
+    concurrent_linked_list_iterator tmp = *this;
+    ++(*this);
+    return tmp;
+  }
+
+  reference operator*() {
+    if (current_node_ == nullptr || index_ >= current_node_->size) {
+      throw std::out_of_range("Iterator is out of range.");
+    }
+
+    return current_node_->data[index_];
+  }
+  pointer operator->() { return &current_node_->data[index_]; }
+  bool operator==(const concurrent_linked_list_iterator& other) const {
+    return (current_node_ == other.current_node_) && (index_ == other.index_);
+  }
+
+  bool operator!=(const concurrent_linked_list_iterator& other) const {
+    return !(*this == other);
+  }
+
+ private:
+  concurrent_linked_list<Key, T, CacheLineSize, Allocator>::linked_list_node*
+      current_node_;
+  std::size_t index_;
+};
+
 }  // namespace skeleton
