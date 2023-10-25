@@ -42,6 +42,10 @@ struct concurrent_linked_list {
     std::size_t size;
     linked_list_node* next;
     linked_list_node() : size{0}, next{nullptr} {}
+    void clear() {
+      size = 0;
+      next = nullptr;
+    }
   };
 
   static_assert(sizeof(linked_list_node) == CacheLineSize);
@@ -59,7 +63,7 @@ struct concurrent_linked_list {
   concurrent_linked_list& operator=(concurrent_linked_list&&) = delete;
 
   void insert(const value_type& pair) {
-    linked_list_node* current_node = root_;
+    auto current_node = root_;
     bool need_space = false;
     while (current_node != nullptr) {
       std::lock_guard<std::mutex> lock(current_node->node_mutex);
@@ -128,7 +132,7 @@ struct concurrent_linked_list {
                                                 range_length);
   }
   std::optional<mapped_type> find(const key_type& key) const {
-    linked_list_node* current_node = root_;
+    auto current_node = root_;
     while (current_node != nullptr) {
       std::lock_guard<std::mutex> lock(current_node->node_mutex);
       for (const auto& slot : current_node->data) {
@@ -142,6 +146,29 @@ struct concurrent_linked_list {
     return std::nullopt;
   }
   void set_num_workers(std::size_t num_workers) const { num_workers_ = num_workers; }
+
+  void clear() {
+    auto current_node = root_;
+    while (current_node != nullptr) {
+      auto next = current_node->next;
+      if (current_node == root_) {
+        current_node->clear();
+      } else {
+        deallocate_node(current_node);
+      }
+      current_node = next;
+    }
+  }
+
+  [[nodiscard]] std::size_t size() const {
+    auto count{0};
+    auto current_node = root_;
+    while (current_node != nullptr) {
+      size += current_node->size;
+      current_node = current_node->next;
+    }
+    return count;
+  }
 
  private:
   linked_list_node* allocate_node() {
