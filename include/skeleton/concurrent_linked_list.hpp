@@ -47,7 +47,7 @@ struct concurrent_linked_list {
   static_assert(sizeof(linked_list_node) == CacheLineSize);
 
   concurrent_linked_list(const Allocator& allocator = Allocator())
-      : allocator_(allocator), root_{nullptr} {
+      : allocator_(allocator), root_{nullptr}, num_workers_{8} {
     root_ = allocate_node();
   }
 
@@ -96,17 +96,16 @@ struct concurrent_linked_list {
       }
     };
 
-    auto result = detail::cpu::launcher(chunk_per_thread,  // launch parameters
-                                        range_length,
-                                        function,      // function
-                                        std::ref(rg),  // args
-                                        range_length);
+    auto result = detail::cpu::threads_launcher(range_length,  // launch parameters
+                                                num_workers_,
+                                                function,      // function
+                                                std::ref(rg),  // args
+                                                range_length);
   }
 
   template <typename R1, typename R2>
   void find_range(R1&& input, R2& output) {
     const auto range_length = input.end() - input.begin();
-    const std::size_t chunk_per_thread = 32;
 
     auto function = [&](std::size_t chunk_index,
                         std::size_t chunk_size,
@@ -114,19 +113,19 @@ struct concurrent_linked_list {
                         R2& output,
                         std::size_t num_items) {
       for (size_t i = 0; i < chunk_size; i++) {
-        auto offset = chunk_index * chunk_per_thread + i;
+        auto offset = chunk_index * chunk_size + i;
         if (offset < range_length) {
           output[offset] = find(input[offset]);
         }
       }
     };
 
-    auto result = detail::cpu::launcher(chunk_per_thread,  // launch parameters
-                                        range_length,
-                                        function,         // function
-                                        std::ref(input),  // args
-                                        std::ref(output),
-                                        range_length);
+    auto result = detail::cpu::threads_launcher(range_length,  // launch parameters
+                                                num_workers_,
+                                                function,         // function
+                                                std::ref(input),  // args
+                                                std::ref(output),
+                                                range_length);
   }
   std::optional<mapped_type> find(const key_type& key) const {
     linked_list_node* current_node = root_;
@@ -142,6 +141,7 @@ struct concurrent_linked_list {
 
     return std::nullopt;
   }
+  void set_num_workers(std::size_t num_workers) const { num_workers_ = num_workers; }
 
  private:
   linked_list_node* allocate_node() {
@@ -160,5 +160,6 @@ struct concurrent_linked_list {
   }
   Allocator allocator_;
   linked_list_node* root_;
+  std::size_t num_workers_;
 };
 }  // namespace skeleton

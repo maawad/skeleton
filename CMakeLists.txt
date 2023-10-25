@@ -13,4 +13,18 @@ target_include_directories(${PROJECT_NAME}
 
 add_library(skeleton::skeleton ALIAS skeleton)
 
-add_subdirectory(examples)
+option(BUILD_BENCHMARKS "Build benchmarks" ON)
+option(BUILD_TESTS "Build tests" ON)
+option(BUILD_EXAMPLES "Build examples" ON)
+
+if(BUILD_BENCHMARKS)
+   add_subdirectory(benchmarks)
+endif(BUILD_BENCHMARKS)
+
+if(BUILD_TESTS)
+   add_subdirectory(test)
+endif(BUILD_TESTS)
+
+if(BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif(BUILD_EXAMPLES)

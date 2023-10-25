@@ -31,6 +31,28 @@ status_type launcher(std::size_t chunk_size,
   return result;
 }
 
+template <typename F, typename... Args>
+status_type threads_launcher(std::size_t num_items,
+                             std::size_t num_threads,
+                             F function,
+                             Args&&... args) {
+  const std::size_t num_chunks = num_threads;
+  const std::size_t chunk_per_thread = (num_items + num_chunks - 1) / num_chunks;
+  std::vector<std::thread> threads;
+
+  for (std::size_t chunk = 0; chunk < num_chunks; chunk++) {
+    std::thread thread(function, chunk, chunk_per_thread, std::forward<Args>(args)...);
+    threads.push_back(std::move(thread));
+  }
+
+  for (auto& thread : threads) {
+    thread.join();
+  }
+
+  status_type result(status_type::SUCCESS);
+  return result;
+}
+
 }  // namespace cpu
 }  // namespace  detail
 
